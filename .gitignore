@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+bin/
+coverage.out
+*.log
+*.key
+*.pem
+*-credentials.json
+.idea/
+.vscode/
+.DS_Store
+
