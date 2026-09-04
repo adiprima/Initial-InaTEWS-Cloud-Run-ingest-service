@@ -35,5 +35,5 @@ ok "Ingest dideploy: ${SERVICE_URL}"
 info "Health check terautentikasi"
 curl --fail --silent --show-error \
     -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
-    "${SERVICE_URL}/healthz"
+    "${SERVICE_URL}/health"
 printf '\n'

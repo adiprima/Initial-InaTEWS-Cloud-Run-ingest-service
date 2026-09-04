@@ -37,8 +37,10 @@ func NewServer(db *sql.DB, processor ingest.Processor, logger *slog.Logger, maxR
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", s.health)
-	mux.HandleFunc("GET /readyz", s.ready)
+	// Cloud Run reserves some URL paths ending in "z", including /healthz.
+	// Keep operational endpoints free of that suffix so requests reach the app.
+	mux.HandleFunc("GET /health", s.health)
+	mux.HandleFunc("GET /ready", s.ready)
 	mux.HandleFunc("POST /pubsub/push", s.pubsubPush)
 	return s.logging(mux)
 }

@@ -27,6 +27,20 @@ func (f *fakeProcessor) Process(_ context.Context, envelope model.Envelope, _ st
 	return f.result, f.err
 }
 
+func TestHealth(t *testing.T) {
+	server := newTestServer(&fakeProcessor{})
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if response.Body.String() != "{\"status\":\"ok\"}\n" {
+		t.Fatalf("body = %q", response.Body.String())
+	}
+}
+
 func TestPubSubPushAccepted(t *testing.T) {
 	payload := `{"schema_version":1,"message_id":"outbox-1","entity_type":"earthquake","operation":"upsert","event_id":"event-1","source_updated_at":"2026-09-03T10:00:00Z","payload":{"eventid":"event-1"}}`
 	body := fmt.Sprintf(`{"message":{"data":"%s","messageId":"pubsub-1"},"subscription":"projects/test/subscriptions/test"}`,

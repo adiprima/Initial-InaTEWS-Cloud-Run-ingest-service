@@ -12,7 +12,7 @@ Project Laravel lokal tetap berada di repository `api-inatews` dan tidak dicampu
 
 Tahap ini sudah menyediakan:
 
-- endpoint `GET /healthz`, `GET /readyz`, dan `POST /pubsub/push`;
+- endpoint `GET /health`, `GET /ready`, dan `POST /pubsub/push`;
 - validasi envelope sinkronisasi versi 1;
 - penyimpanan raw payload delapan tipe entitas;
 - receipt idempoten berdasarkan `message_id`;
