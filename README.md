@@ -4,7 +4,7 @@ Repository terpisah untuk komponen InaTEWS yang berjalan di Google Cloud:
 
 - `inatews-ingest`: penerima authenticated Pub/Sub push dan penulis Cloud SQL.
 - `inatews-migrate`: Cloud Run Job untuk menjalankan migration berurutan.
-- Public API akan ditambahkan setelah jalur ingest lulus pengujian end-to-end.
+- `inatews-api`: API publik read-only dengan autentikasi `X-API-Key`.
 
 Project Laravel lokal tetap berada di repository `api-inatews` dan tidak dicampur dengan repository ini.
 
@@ -19,7 +19,7 @@ Tahap ini sudah menyediakan:
 - perlindungan terhadap update lama menggunakan waktu dan sequence sumber;
 - proyeksi terindeks pertama untuk earthquake;
 - migration job, container, Cloud Build, dan script deployment;
-- schema awal API key untuk tahap public API berikutnya.
+- API earthquake list/detail, API key, rate limit, dan CORS.
 - GitHub Actions untuk test, race detector, vet, format, dan syntax shell.
 
 Tipe entitas yang diterima:
@@ -58,6 +58,7 @@ Secret berikut harus memiliki versi `ENABLED`:
 ```text
 inatews-migrator-db-password
 inatews-ingest-db-password
+inatews-api-db-password
 ```
 
 Semua script deployment dijalankan dari Google Cloud Shell, bukan server produksi.
@@ -170,6 +171,64 @@ gcloud run services logs read inatews-ingest \
 ```
 
 Script mengirim envelope yang sama dua kali. Log sukses harus mengandung `result=applied` untuk message pertama dan `result=duplicate` untuk message kedua tanpa menambah record baru.
+
+### 10. Buat API key awal
+
+Build terbaru juga menghasilkan image `inatews-api` dan `inatews-apikey`. Jalankan dengan tag yang sama seperti build:
+
+```bash
+export IMAGE_TAG="$(git rev-parse --short HEAD)"
+./scripts/06-create-api-key.sh
+```
+
+Nilai API key acak hanya disimpan di Secret Manager `inatews-public-api-key`. Database hanya menyimpan SHA-256 hash-nya.
+
+### 11. Deploy API publik
+
+```bash
+./scripts/07-deploy-api.sh
+```
+
+Ambil URL canonical yang benar dari Cloud Run (jangan menyalin URL berformat Markdown):
+
+```bash
+API_URL="$(gcloud run services describe inatews-api \
+  --project=gempa-integration-prod \
+  --region=asia-southeast2 \
+  --format='value(status.url)')"
+printf 'API_URL=%s\n' "$API_URL"
+```
+
+Endpoint yang tersedia:
+
+```text
+GET /health
+GET /ready
+GET /v1/earthquakes
+GET /v1/earthquakes/{eventid}
+```
+
+Endpoint data membutuhkan header `X-API-Key`. Filter list yang didukung adalah `limit`, `cursor`, `min_mag`, `max_mag`, `status`, `start_time`, dan `end_time`. Waktu memakai RFC3339.
+
+### 12. Uji API
+
+```bash
+./scripts/08-test-api.sh
+```
+
+Atau lakukan manual dari Cloud Shell:
+
+```bash
+API_KEY="$(gcloud secrets versions access latest \
+  --secret=inatews-public-api-key \
+  --project=gempa-integration-prod)"
+
+curl --fail --silent --show-error \
+  --header "X-API-Key: ${API_KEY}" \
+  "${API_URL}/v1/earthquakes?limit=5&min_mag=5"
+
+unset API_KEY
+```
 
 ## Envelope Versi 1
 

@@ -1,23 +1,41 @@
 steps:
   - name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
     args:
       - build
       - --file=Dockerfile.ingest
       - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-ingest:${_TAG}
       - .
   - name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
     args:
       - build
       - --file=Dockerfile.migrate
       - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-migrate:${_TAG}
       - .
+  - name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args:
+      - build
+      - --file=Dockerfile.api
+      - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-api:${_TAG}
+      - .
+  - name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args:
+      - build
+      - --file=Dockerfile.apikey
+      - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-apikey:${_TAG}
+      - .
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-ingest:${_TAG}
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-migrate:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-api:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-apikey:${_TAG}
 substitutions:
   _REGION: asia-southeast2
   _REPOSITORY: inatews-containers
   _TAG: latest
 options:
   logging: CLOUD_LOGGING_ONLY
-
+timeout: 1800s

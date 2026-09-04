@@ -16,5 +16,4 @@ gcloud builds submit "${PROJECT_DIR}" \
     --config="${PROJECT_DIR}/cloudbuild.yaml" \
     --substitutions="_REGION=${REGION},_REPOSITORY=${ARTIFACT_REPOSITORY},_TAG=${IMAGE_TAG}"
 
-ok "Image ingest dan migrator berhasil dipush dengan tag ${IMAGE_TAG}"
-
+ok "Image ingest, migrator, API, dan API-key job berhasil dipush dengan tag ${IMAGE_TAG}"

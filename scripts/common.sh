@@ -10,7 +10,9 @@ SYNC_TOPIC="${SYNC_TOPIC:-inatews-sync-v1}"
 DLQ_TOPIC="${DLQ_TOPIC:-inatews-sync-v1-dlq}"
 INGEST_SUBSCRIPTION="${INGEST_SUBSCRIPTION:-inatews-sync-v1-ingest-sub}"
 INGEST_SERVICE="${INGEST_SERVICE:-inatews-ingest}"
+API_SERVICE="${API_SERVICE:-inatews-api}"
 INGEST_SERVICE_ACCOUNT="${INGEST_SERVICE_ACCOUNT:-inatews-ingest-sa}"
+API_SERVICE_ACCOUNT="${API_SERVICE_ACCOUNT:-inatews-api-sa}"
 MIGRATOR_SERVICE_ACCOUNT="${MIGRATOR_SERVICE_ACCOUNT:-inatews-migrator-sa}"
 PUBSUB_INVOKER_SERVICE_ACCOUNT="${PUBSUB_INVOKER_SERVICE_ACCOUNT:-inatews-pubsub-invoker}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
@@ -41,4 +43,3 @@ service_account_email() {
 service_account_exists() {
     gcloud iam service-accounts describe "$(service_account_email "$1")" --project="${PROJECT_ID}" >/dev/null 2>&1
 }
-
