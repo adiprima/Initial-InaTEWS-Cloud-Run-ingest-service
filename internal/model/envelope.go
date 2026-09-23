@@ -88,10 +88,31 @@ type EarthquakePayload struct {
 	WIBDate         *string         `json:"wib_date"`
 	WIBTime         *string         `json:"wib_time"`
 	Properties      json.RawMessage `json:"properties"`
-	HasMomentTensor bool            `json:"has_moment_tensor"`
-	HasFeltData     bool            `json:"has_felt_data"`
-	HasDamageData   bool            `json:"has_damage_data"`
-	HasNarasi       bool            `json:"has_narasi"`
-	HasM5Payload    bool            `json:"has_m5_payload"`
-	HasEqPhase      bool            `json:"has_eq_phase"`
+	HasMomentTensor Boolean         `json:"has_moment_tensor"`
+	HasFeltData     Boolean         `json:"has_felt_data"`
+	HasDamageData   Boolean         `json:"has_damage_data"`
+	HasNarasi       Boolean         `json:"has_narasi"`
+	HasM5Payload    Boolean         `json:"has_m5_payload"`
+	HasEqPhase      Boolean         `json:"has_eq_phase"`
+}
+
+// Boolean accepts both JSON booleans and MySQL JSON_OBJECT boolean flags,
+// which are encoded as the numbers 0 and 1 when sourced from TINYINT columns.
+type Boolean bool
+
+func (b *Boolean) UnmarshalJSON(data []byte) error {
+	switch string(bytes.TrimSpace(data)) {
+	case "true", "1":
+		*b = true
+		return nil
+	case "false", "0", "null":
+		*b = false
+		return nil
+	default:
+		return fmt.Errorf("boolean must be true, false, 1, or 0")
+	}
+}
+
+func (b Boolean) Bool() bool {
+	return bool(b)
 }

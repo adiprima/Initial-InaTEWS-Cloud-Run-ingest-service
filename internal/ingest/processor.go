@@ -231,9 +231,9 @@ func projectEarthquake(ctx context.Context, tx *sql.Tx, envelope model.Envelope)
 		payload.EventID, nullableInt64(envelope.SourceRowID), payload.Source,
 		payload.Magnitude, payload.DepthKM, payload.Latitude, payload.Longitude,
 		payload.Place, payload.WIBDate, payload.WIBTime, eventTime, payload.Type,
-		payload.Status, properties, payload.HasMomentTensor, payload.HasFeltData,
-		payload.HasDamageData, payload.HasNarasi, payload.HasM5Payload,
-		payload.HasEqPhase, envelope.SourceUpdatedAt, envelope.SourceSequence,
+		payload.Status, properties, payload.HasMomentTensor.Bool(), payload.HasFeltData.Bool(),
+		payload.HasDamageData.Bool(), payload.HasNarasi.Bool(), payload.HasM5Payload.Bool(),
+		payload.HasEqPhase.Bool(), envelope.SourceUpdatedAt, envelope.SourceSequence,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert earthquake projection: %w", err)
