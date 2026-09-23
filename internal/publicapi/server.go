@@ -30,6 +30,8 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /ready", s.ready)
+	mux.HandleFunc("GET /openapi.json", s.openAPI)
+	mux.HandleFunc("GET /docs", s.swaggerUI)
 	mux.Handle("GET /v1/earthquakes", s.requireAPIKey("earthquakes:read", http.HandlerFunc(s.listEarthquakes)))
 	mux.Handle("GET /v1/earthquakes/{eventid}", s.requireAPIKey("earthquakes:read", http.HandlerFunc(s.getEarthquake)))
 	return s.recoverPanic(s.requestLog(s.cors(mux)))

@@ -30,6 +30,22 @@ type Earthquake struct {
 	SourceSequence  uint64          `json:"source_sequence"`
 }
 
+// EarthquakeDetail keeps the summary fields backward compatible while adding
+// the complete source payload and every related entity replicated from InaTEWS.
+type EarthquakeDetail struct {
+	Earthquake
+	SourcePayload json.RawMessage            `json:"source_payload"`
+	Related       map[string][]RelatedEntity `json:"related"`
+}
+
+type RelatedEntity struct {
+	EntityKey       string          `json:"entity_key"`
+	SourceRowID     *int64          `json:"source_row_id,omitempty"`
+	SourceUpdatedAt time.Time       `json:"source_updated_at"`
+	SourceSequence  uint64          `json:"source_sequence"`
+	Payload         json.RawMessage `json:"payload"`
+}
+
 type ListFilter struct {
 	Limit     int
 	Cursor    string

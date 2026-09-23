@@ -19,7 +19,7 @@ Tahap ini sudah menyediakan:
 - perlindungan terhadap update lama menggunakan waktu dan sequence sumber;
 - proyeksi terindeks pertama untuk earthquake;
 - migration job, container, Cloud Build, dan script deployment;
-- API earthquake list/detail, API key, rate limit, dan CORS.
+- API earthquake list/detail lengkap, API key, rate limit, CORS, dan Swagger UI.
 - GitHub Actions untuk test, race detector, vet, format, dan syntax shell.
 
 Tipe entitas yang diterima:
@@ -204,11 +204,19 @@ Endpoint yang tersedia:
 ```text
 GET /health
 GET /ready
+GET /docs
+GET /openapi.json
 GET /v1/earthquakes
 GET /v1/earthquakes/{eventid}
 ```
 
 Endpoint data membutuhkan header `X-API-Key`. Filter list yang didukung adalah `limit`, `cursor`, `min_mag`, `max_mag`, `status`, `start_time`, dan `end_time`. Waktu memakai RFC3339.
+
+Buka `${API_URL}/docs` untuk Swagger UI interaktif. Klik **Authorize**, isi API key,
+lalu endpoint dapat dicoba langsung dari browser. Endpoint detail mengembalikan field
+ringkasan yang sama seperti sebelumnya, ditambah `source_payload` lengkap dan `related`
+yang berisi array `tsunami`, `moment_tensor`, `felt`, `damage`, `narasi`, `m5`, dan
+`eq_phase`.
 
 ### 12. Uji API
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -14,7 +15,7 @@ var ErrNotFound = errors.New("not found")
 
 type Repository interface {
 	ListEarthquakes(context.Context, ListFilter) (Page, error)
-	GetEarthquake(context.Context, string) (Earthquake, error)
+	GetEarthquake(context.Context, string) (EarthquakeDetail, error)
 }
 
 type SQLRepository struct {
@@ -93,7 +94,7 @@ func (r *SQLRepository) ListEarthquakes(ctx context.Context, filter ListFilter) 
 	return page, nil
 }
 
-func (r *SQLRepository) GetEarthquake(ctx context.Context, eventID string) (Earthquake, error) {
+func (r *SQLRepository) GetEarthquake(ctx context.Context, eventID string) (EarthquakeDetail, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT eventid, source_row_id, source, mag, depth_km, latitude, longitude,
 		       place, wib_date, wib_time, datetime_utc, type, status, properties,
@@ -103,12 +104,57 @@ func (r *SQLRepository) GetEarthquake(ctx context.Context, eventID string) (Eart
 		WHERE eventid = ?`, eventID)
 	item, err := scanEarthquake(row)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Earthquake{}, ErrNotFound
+		return EarthquakeDetail{}, ErrNotFound
 	}
 	if err != nil {
-		return Earthquake{}, err
+		return EarthquakeDetail{}, err
 	}
-	return item, nil
+
+	detail := EarthquakeDetail{
+		Earthquake:    item,
+		SourcePayload: json.RawMessage(`{}`),
+		Related: map[string][]RelatedEntity{
+			"tsunami": {}, "moment_tensor": {}, "felt": {}, "damage": {},
+			"narasi": {}, "m5": {}, "eq_phase": {},
+		},
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT entity_type, entity_key, source_row_id, source_updated_at,
+		       source_sequence, payload
+		FROM replicated_entities
+		WHERE event_id = ? AND is_deleted = FALSE
+		ORDER BY entity_type, source_updated_at, source_sequence`, eventID)
+	if err != nil {
+		return EarthquakeDetail{}, fmt.Errorf("query related earthquake data: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var entityType, entityKey string
+		var sourceRowID sql.NullInt64
+		var sourceUpdatedAt time.Time
+		var sourceSequence uint64
+		var payload []byte
+		if err := rows.Scan(&entityType, &entityKey, &sourceRowID, &sourceUpdatedAt, &sourceSequence, &payload); err != nil {
+			return EarthquakeDetail{}, fmt.Errorf("scan related earthquake data: %w", err)
+		}
+		if len(payload) == 0 || !json.Valid(payload) {
+			payload = []byte("{}")
+		}
+		if entityType == "earthquake" {
+			detail.SourcePayload = append(json.RawMessage(nil), payload...)
+			continue
+		}
+		detail.Related[entityType] = append(detail.Related[entityType], RelatedEntity{
+			EntityKey: entityKey, SourceRowID: int64Ptr(sourceRowID),
+			SourceUpdatedAt: sourceUpdatedAt.UTC(), SourceSequence: sourceSequence,
+			Payload: append(json.RawMessage(nil), payload...),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return EarthquakeDetail{}, fmt.Errorf("iterate related earthquake data: %w", err)
+	}
+	return detail, nil
 }
 
 type scanner interface {
