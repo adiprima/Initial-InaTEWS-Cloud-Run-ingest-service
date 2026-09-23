@@ -98,7 +98,7 @@ go vet ./...
 ./scripts/01-build.sh
 ```
 
-Script menjalankan unit test, membangun semua image (ingest, migrator, API publik, admin API, dan API-key job), lalu mengunggahnya ke Artifact Registry. Gunakan SHA commit GitHub sebagai tag:
+Script menjalankan unit test, lalu meminta Cloud Build mengambil **commit yang sama langsung dari URL GitHub**. Semua image (ingest, migrator, API publik, admin API, dan API-key job) diunggah ke Artifact Registry. Gunakan SHA commit GitHub sebagai tag:
 
 ```bash
 export IMAGE_TAG="$(git rev-parse --short=12 HEAD)"

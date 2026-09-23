@@ -16,9 +16,10 @@ REMOTE_SHA="$(git -C "${PROJECT_DIR}" ls-remote origin refs/heads/main | cut -f1
 info "Menjalankan unit test sebelum build"
 (cd "${PROJECT_DIR}" && go test ./...)
 
-info "Build dan push image melalui Cloud Build"
-gcloud builds submit "${PROJECT_DIR}" \
+info "Build dan push image dari commit GitHub ${SOURCE_SHA} melalui Cloud Build"
+gcloud builds submit "https://github.com/adiprima/Initial-InaTEWS-Cloud-Run-ingest-service.git" \
     --project="${PROJECT_ID}" \
+    --git-source-revision="${SOURCE_SHA}" \
     --config="${PROJECT_DIR}/cloudbuild.yaml" \
     --substitutions="_REGION=${REGION},_REPOSITORY=${ARTIFACT_REPOSITORY},_TAG=${IMAGE_TAG}"
 
