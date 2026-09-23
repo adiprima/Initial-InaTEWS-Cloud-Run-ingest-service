@@ -34,10 +34,19 @@ gcloud pubsub topics add-iam-policy-binding "${DLQ_TOPIC}" \
     --role=roles/pubsub.publisher >/dev/null
 
 if gcloud pubsub subscriptions describe "${INGEST_SUBSCRIPTION}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
-    EXISTING_ENDPOINT="$(gcloud pubsub subscriptions describe "${INGEST_SUBSCRIPTION}" \
-        --project="${PROJECT_ID}" --format='value(pushConfig.pushEndpoint)')"
-    [[ "${EXISTING_ENDPOINT}" == "${PUSH_ENDPOINT}" ]] || die "Subscription ada dengan endpoint berbeda: ${EXISTING_ENDPOINT}"
-    ok "Subscription sudah ada dengan endpoint yang sesuai"
+    info "Sinkronkan kembali endpoint dan autentikasi OIDC subscription"
+    # A deploy can preserve an old or incomplete pushConfig. Always update all
+    # push authentication fields so Pub/Sub sends a Google-signed ID token with
+    # the Cloud Run service URL as its audience.
+    gcloud pubsub subscriptions update "${INGEST_SUBSCRIPTION}" \
+        --project="${PROJECT_ID}" \
+        --push-endpoint="${PUSH_ENDPOINT}" \
+        --push-auth-service-account="${INVOKER_EMAIL}" \
+        --push-auth-token-audience="${SERVICE_URL}" \
+        --ack-deadline=60 \
+        --min-retry-delay=10s \
+        --max-retry-delay=600s >/dev/null
+    ok "Push endpoint dan OIDC subscription diperbarui"
 else
     gcloud pubsub subscriptions create "${INGEST_SUBSCRIPTION}" \
         --project="${PROJECT_ID}" \
@@ -60,5 +69,17 @@ gcloud pubsub subscriptions add-iam-policy-binding "${INGEST_SUBSCRIPTION}" \
     --role=roles/pubsub.subscriber >/dev/null
 
 ok "Authenticated push subscription siap"
-gcloud pubsub subscriptions describe "${INGEST_SUBSCRIPTION}" --project="${PROJECT_ID}"
+ACTUAL_ENDPOINT="$(gcloud pubsub subscriptions describe "${INGEST_SUBSCRIPTION}" \
+    --project="${PROJECT_ID}" --format='value(pushConfig.pushEndpoint)')"
+ACTUAL_INVOKER="$(gcloud pubsub subscriptions describe "${INGEST_SUBSCRIPTION}" \
+    --project="${PROJECT_ID}" --format='value(pushConfig.oidcToken.serviceAccountEmail)')"
+ACTUAL_AUDIENCE="$(gcloud pubsub subscriptions describe "${INGEST_SUBSCRIPTION}" \
+    --project="${PROJECT_ID}" --format='value(pushConfig.oidcToken.audience)')"
 
+[[ "${ACTUAL_ENDPOINT}" == "${PUSH_ENDPOINT}" ]] || die "Push endpoint tidak sesuai: ${ACTUAL_ENDPOINT}"
+[[ "${ACTUAL_INVOKER}" == "${INVOKER_EMAIL}" ]] || die "OIDC service account tidak sesuai: ${ACTUAL_INVOKER}"
+[[ "${ACTUAL_AUDIENCE}" == "${SERVICE_URL}" ]] || die "OIDC audience tidak sesuai: ${ACTUAL_AUDIENCE}"
+
+printf 'Push endpoint : %s\n' "${ACTUAL_ENDPOINT}"
+printf 'OIDC invoker  : %s\n' "${ACTUAL_INVOKER}"
+printf 'OIDC audience : %s\n' "${ACTUAL_AUDIENCE}"
