@@ -15,10 +15,10 @@ if ! gcloud secrets describe "${ADMIN_DB_SECRET}" --project="${PROJECT_ID}" >/de
 else
     ADMIN_DB_PASSWORD="$(gcloud secrets versions access latest --secret="${ADMIN_DB_SECRET}" --project="${PROJECT_ID}")"
 fi
-if gcloud sql users list --instance="${SQL_INSTANCE}" --project="${PROJECT_ID}" --format='value(name)' | grep -Fxq inatews_admin; then
-    gcloud sql users set-password inatews_admin --instance="${SQL_INSTANCE}" --project="${PROJECT_ID}" --password="${ADMIN_DB_PASSWORD}" >/dev/null
+if gcloud sql users list --instance="${SQL_INSTANCE}" --project="${PROJECT_ID}" --filter='name=inatews_admin' --format='value(name)' | grep -Fxq inatews_admin; then
+    gcloud sql users set-password inatews_admin --host='%' --instance="${SQL_INSTANCE}" --project="${PROJECT_ID}" --password="${ADMIN_DB_PASSWORD}" >/dev/null
 else
-    gcloud sql users create inatews_admin --instance="${SQL_INSTANCE}" --project="${PROJECT_ID}" --password="${ADMIN_DB_PASSWORD}" >/dev/null
+    gcloud sql users create inatews_admin --host='%' --instance="${SQL_INSTANCE}" --project="${PROJECT_ID}" --password="${ADMIN_DB_PASSWORD}" >/dev/null
 fi
 unset ADMIN_DB_PASSWORD
 if [[ "${PREPARE_ONLY:-0}" == "1" ]]; then
