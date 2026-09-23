@@ -5,6 +5,7 @@ Repository terpisah untuk komponen InaTEWS yang berjalan di Google Cloud:
 - `inatews-ingest`: penerima authenticated Pub/Sub push dan penulis Cloud SQL.
 - `inatews-migrate`: Cloud Run Job untuk menjalankan migration berurutan.
 - `inatews-api`: API publik read-only dengan autentikasi `X-API-Key`.
+- `inatews-admin-api`: control plane privat untuk monitoring, rekonsiliasi, dan lifecycle API key.
 
 Project Laravel lokal tetap berada di repository `api-inatews` dan tidak dicampur dengan repository ini.
 
@@ -61,18 +62,28 @@ inatews-ingest-db-password
 inatews-api-db-password
 ```
 
+`inatews-admin-db-password` dan user `inatews_admin` dibuat idempoten oleh `PREPARE_ONLY=1 ./scripts/09-deploy-admin-api.sh` pada deployment pertama.
+
 Semua script deployment dijalankan dari Google Cloud Shell, bukan server produksi.
 
 ## Urutan Deployment Pertama
 
-### 1. Masukkan repository ke Cloud Shell
+### 1. Ambil commit GitHub di Cloud Shell
 
-Push repository ini ke repository Git terpisah, lalu clone dari Cloud Shell. Alternatif sementara adalah mengunggah folder ini melalui Cloud Shell Editor.
+Kode deployment berasal dari `github.com/adiprima/Initial-InaTEWS-Cloud-Run-ingest-service`. Clone repository yang sudah di-push, atau perbarui checkout yang ada. Cloud Shell perlu autentikasi GitHub sendiri jika repository private; koneksi Cloud Build ke GitHub tidak otomatis mengautentikasi terminal Cloud Shell.
 
 ```bash
-cd /path/ke/inatews-cloud-run
+git clone https://github.com/adiprima/Initial-InaTEWS-Cloud-Run-ingest-service.git ~/inatews-cloud-run
+cd ~/inatews-cloud-run
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+test -z "$(git status --porcelain)"
+git rev-parse HEAD
 gcloud config set project gempa-integration-prod
 ```
+
+Jika checkout sudah ada, lewati `git clone`. Perintah `test` harus selesai tanpa error. Deploy hanya dari checkout bersih agar tag image benar-benar mewakili isi commit.
 
 ### 2. Jalankan tes
 
@@ -87,15 +98,14 @@ go vet ./...
 ./scripts/01-build.sh
 ```
 
-Script menjalankan unit test, membangun image ingest dan migrator, lalu mengunggah keduanya ke Artifact Registry dengan tag `latest`.
-
-Untuk tag immutable:
+Script menjalankan unit test, membangun semua image (ingest, migrator, API publik, admin API, dan API-key job), lalu mengunggahnya ke Artifact Registry. Gunakan SHA commit GitHub sebagai tag:
 
 ```bash
-IMAGE_TAG="$(git rev-parse --short HEAD)" ./scripts/01-build.sh
+export IMAGE_TAG="$(git rev-parse --short=12 HEAD)"
+./scripts/01-build.sh
 ```
 
-Gunakan tag yang sama pada semua langkah deployment berikutnya.
+Gunakan sesi Cloud Shell dan `IMAGE_TAG` yang sama pada semua langkah deployment berikutnya. Tag tersebut memungkinkan image dan revision Cloud Run ditelusuri ke commit GitHub.
 
 ### 4. Pastikan migrator memiliki hak schema
 
@@ -124,6 +134,12 @@ gcloud run jobs executions list \
 
 ### 6. Terapkan hak database minimum
 
+Pada deployment pertama, buat user dan secret control plane terlebih dahulu. Mode ini belum mendeploy service:
+
+```bash
+PREPARE_ONLY=1 ./scripts/09-deploy-admin-api.sh
+```
+
 Setelah migration berhasil, buka Cloud SQL Studio sebagai `root` dan jalankan [ops/grants.sql](ops/grants.sql).
 
 Verifikasi:
@@ -132,6 +148,7 @@ Verifikasi:
 SHOW GRANTS FOR 'inatews_migrator'@'%';
 SHOW GRANTS FOR 'inatews_ingest'@'%';
 SHOW GRANTS FOR 'inatews_api'@'%';
+SHOW GRANTS FOR 'inatews_admin'@'%';
 ```
 
 ### 7. Deploy private ingest
@@ -236,6 +253,26 @@ curl --fail --silent --show-error \
   "${API_URL}/v1/earthquakes?limit=5&min_mag=5"
 
 unset API_KEY
+```
+
+### 13. Deploy private operations API
+
+Migration `000004` menambahkan receipt telemetry, agregat request per menit dengan retensi 30 hari, status suspend key, dan audit admin. Setelah user/secret disiapkan pada langkah 6 dan `ops/grants.sql` diterapkan, deploy:
+
+```bash
+./scripts/09-deploy-admin-api.sh
+./scripts/10-test-admin-api.sh
+```
+
+Service `inatews-admin-api` memakai `--no-allow-unauthenticated`. Hanya `inatews-dashboard-sa` yang diberi `roles/run.invoker`. Endpoint private mencakup overview pipeline, count delapan entitas, event drill-down beserta receipt, verifikasi receipt batch, metrik API, client/key lifecycle, dan audit.
+
+URL private service dapat dilihat dengan:
+
+```bash
+gcloud run services describe inatews-admin-api \
+  --project=gempa-integration-prod \
+  --region=asia-southeast2 \
+  --format='value(status.url)'
 ```
 
 ## Envelope Versi 1

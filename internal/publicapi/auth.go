@@ -38,19 +38,20 @@ func (a *SQLAuthorizer) Authorize(ctx context.Context, rawKey, requiredPrivilege
 	var keyLimit sql.NullInt64
 	var defaultLimit uint64
 	var expiresAt sql.NullTime
+	var suspendedAt sql.NullTime
 	var revokedAt sql.NullTime
 	var clientStatus string
 	err := a.db.QueryRowContext(ctx, `
 		SELECT k.id, c.id, c.name, c.status, k.privileges,
 		       k.rate_limit_per_minute, c.default_rate_limit_per_minute,
-		       k.expires_at, k.revoked_at
+		       k.expires_at, k.suspended_at, k.revoked_at
 		FROM api_keys k
 		JOIN api_clients c ON c.id = k.client_id
 		WHERE k.key_hash = ?
 		LIMIT 1`, hash[:]).Scan(
 		&principal.APIKeyID, &principal.ClientID, &principal.ClientName,
 		&clientStatus, &privilegesRaw, &keyLimit, &defaultLimit,
-		&expiresAt, &revokedAt,
+		&expiresAt, &suspendedAt, &revokedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Principal{}, ErrUnauthorized
@@ -58,7 +59,7 @@ func (a *SQLAuthorizer) Authorize(ctx context.Context, rawKey, requiredPrivilege
 	if err != nil {
 		return Principal{}, fmt.Errorf("lookup API key: %w", err)
 	}
-	if clientStatus != "active" || revokedAt.Valid || (expiresAt.Valid && !expiresAt.Time.After(time.Now().UTC())) {
+	if clientStatus != "active" || suspendedAt.Valid || revokedAt.Valid || (expiresAt.Valid && !expiresAt.Time.After(time.Now().UTC())) {
 		return Principal{}, ErrUnauthorized
 	}
 

@@ -33,6 +33,7 @@ func NewSQLProcessor(db *sql.DB) *SQLProcessor {
 }
 
 func (p *SQLProcessor) Process(ctx context.Context, envelope model.Envelope, pubsubMessageID string) (Result, error) {
+	started := time.Now()
 	if err := envelope.NormalizeAndValidate(); err != nil {
 		return "", err
 	}
@@ -52,6 +53,15 @@ func (p *SQLProcessor) Process(ctx context.Context, envelope model.Envelope, pub
 	)
 	if err != nil {
 		if isDuplicateKey(err) {
+			if _, updateErr := tx.ExecContext(ctx, `
+				UPDATE sync_receipts
+				SET delivery_count = delivery_count + 1, last_received_at = CURRENT_TIMESTAMP(6)
+				WHERE message_id = ?`, envelope.MessageID); updateErr != nil {
+				return "", fmt.Errorf("update duplicate receipt: %w", updateErr)
+			}
+			if commitErr := tx.Commit(); commitErr != nil {
+				return "", fmt.Errorf("commit duplicate receipt: %w", commitErr)
+			}
 			return ResultDuplicate, nil
 		}
 		return "", fmt.Errorf("insert sync receipt: %w", err)
@@ -86,8 +96,9 @@ func (p *SQLProcessor) Process(ctx context.Context, envelope model.Envelope, pub
 	if isStale(envelope.SourceUpdatedAt, envelope.SourceSequence, currentTime, currentSequence) {
 		_, err = tx.ExecContext(ctx, `
 			UPDATE sync_receipts
-			SET status = 'stale', reason = 'older source version', processed_at = CURRENT_TIMESTAMP(6)
-			WHERE message_id = ?`, envelope.MessageID)
+			SET status = 'stale', reason = 'older source version', processed_at = CURRENT_TIMESTAMP(6),
+			    processing_duration_ms = ?
+			WHERE message_id = ?`, uint64(time.Since(started).Milliseconds()), envelope.MessageID)
 		if err != nil {
 			return "", fmt.Errorf("mark stale receipt: %w", err)
 		}
@@ -119,8 +130,8 @@ func (p *SQLProcessor) Process(ctx context.Context, envelope model.Envelope, pub
 
 	_, err = tx.ExecContext(ctx, `
 		UPDATE sync_receipts
-		SET status = 'applied', processed_at = CURRENT_TIMESTAMP(6)
-		WHERE message_id = ?`, envelope.MessageID)
+		SET status = 'applied', processed_at = CURRENT_TIMESTAMP(6), processing_duration_ms = ?
+		WHERE message_id = ?`, uint64(time.Since(started).Milliseconds()), envelope.MessageID)
 	if err != nil {
 		return "", fmt.Errorf("complete sync receipt: %w", err)
 	}

@@ -27,11 +27,19 @@ steps:
       - --file=Dockerfile.apikey
       - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-apikey:${_TAG}
       - .
+  - name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args:
+      - build
+      - --file=Dockerfile.admin
+      - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-admin-api:${_TAG}
+      - .
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-ingest:${_TAG}
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-migrate:${_TAG}
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-api:${_TAG}
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-apikey:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/inatews-admin-api:${_TAG}
 substitutions:
   _REGION: asia-southeast2
   _REPOSITORY: inatews-containers

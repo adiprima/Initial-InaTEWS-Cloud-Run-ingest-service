@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,6 +19,7 @@ type Server struct {
 	authorizer Authorizer
 	logger     *slog.Logger
 	config     Config
+	cleanupDay atomic.Int64
 }
 
 type principalKey struct{}
@@ -127,8 +129,18 @@ func (s *Server) parseFilter(r *http.Request) (ListFilter, error) {
 
 func (s *Server) requireAPIKey(privilege string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started := time.Now()
+		measured := &metricResponseWriter{ResponseWriter: w, status: http.StatusOK}
+		w = measured
 		rawKey := strings.TrimSpace(r.Header.Get("X-API-Key"))
 		principal, err := s.authorizer.Authorize(r.Context(), rawKey, privilege)
+		apiKeyID := uint64(0)
+		if err == nil {
+			apiKeyID = principal.APIKeyID
+		}
+		defer func() {
+			s.recordAPIMetric(r.Context(), apiKeyID, r.Method, r.Pattern, measured.status, time.Since(started))
+		}()
 		switch {
 		case errors.Is(err, ErrUnauthorized):
 			writeError(w, http.StatusUnauthorized, "unauthorized", "A valid X-API-Key header is required")
@@ -147,6 +159,44 @@ func (s *Server) requireAPIKey(privilege string, next http.Handler) http.Handler
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey{}, principal)))
 	})
+}
+
+type metricResponseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *metricResponseWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (s *Server) recordAPIMetric(ctx context.Context, apiKeyID uint64, method, route string, status int, duration time.Duration) {
+	if route == "" {
+		route = "unknown"
+	}
+	durationMS := max(duration.Milliseconds(), 0)
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO api_request_minutes
+			(minute_bucket, api_key_id, method, route, status_code, request_count, total_duration_ms, max_duration_ms)
+		VALUES (DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:00'), ?, ?, ?, ?, 1, ?, ?)
+		ON DUPLICATE KEY UPDATE request_count=request_count+1,
+			total_duration_ms=total_duration_ms+VALUES(total_duration_ms),
+			max_duration_ms=GREATEST(max_duration_ms, VALUES(max_duration_ms))`,
+		apiKeyID, method, route, status, durationMS, durationMS)
+	if err != nil {
+		s.logger.Warn("record API metric failed", "error", err)
+	}
+	day := time.Now().UTC().Unix() / 86400
+	previous := s.cleanupDay.Load()
+	if previous != day && s.cleanupDay.CompareAndSwap(previous, day) {
+		if _, cleanupErr := s.db.ExecContext(ctx, `DELETE FROM api_request_minutes WHERE minute_bucket < UTC_TIMESTAMP() - INTERVAL 30 DAY`); cleanupErr != nil {
+			s.logger.Warn("clean old API metrics failed", "error", cleanupErr)
+		}
+		if _, cleanupErr := s.db.ExecContext(ctx, `DELETE FROM api_usage_minutes WHERE minute_bucket < UTC_TIMESTAMP() - INTERVAL 30 DAY`); cleanupErr != nil {
+			s.logger.Warn("clean old API rate-limit buckets failed", "error", cleanupErr)
+		}
+	}
 }
 
 func (s *Server) cors(next http.Handler) http.Handler {
